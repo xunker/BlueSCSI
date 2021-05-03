@@ -370,12 +370,12 @@ bool hddimageOpen(HDDIMG *h,const char *image_name,int id,int lun,int blocksize)
 unsigned long nextOledUpdate = UPDATE_OLED_SPEED_DISPLAY_EVERY_MS;
 
 #define OLED_SPEED_DISPLAY_BINS 2 // one per UPDATE_OLED_SPEED_DISPLAY_EVERY_MS
-uint16_t readSpeedCounts[OLED_SPEED_DISPLAY_BINS];
+uint32_t readSpeedCounts[OLED_SPEED_DISPLAY_BINS];
 uint8_t currentReadSpeedCountsIndex = 0;
-uint16_t writeSpeedCounts[OLED_SPEED_DISPLAY_BINS];
+uint32_t writeSpeedCounts[OLED_SPEED_DISPLAY_BINS];
 uint8_t currentWriteSpeedCountsIndex = 0;
 
-const char kiloBytesSecLabel[] = " K/s";
+const char kiloBytesSecLabel[] = " K/s:";
 
 void buildOledDisplay() {
   /*
@@ -383,7 +383,7 @@ void buildOledDisplay() {
 
   A 0123456
   B R K/s: nnnn
-  C w K/s: nnnn
+  C W K/s: nnnn
   D
   */
 
@@ -395,30 +395,35 @@ void buildOledDisplay() {
     }
   }
   oled.println();
-  oled.println(F("R"));
-  // oled.print(F("R"));
-  // oled.println(kiloBytesSecLabel);
-  oled.println(F("W"));
+  // oled.println(F("R"));
+  oled.print(F("R"));
+  oled.println(kiloBytesSecLabel);
   // oled.println(F("W"));
-  // oled.println(kiloBytesSecLabel);
+  oled.print(F("W"));
+  oled.println(kiloBytesSecLabel);
 }
 
-
-
+boolean lastPrint = false;
 void updateOledDisplay(uint32_t readSpeed, uint32_t writeSpeed) {
-  // void clearField(uint8_t col, uint8_t row, uint8_t n);
+  oled.setCursor(10, 2);
+  if (lastPrint) {
+    oled.print("x");
+  } else {
+    oled.print("y");
+  }
+  lastPrint = !lastPrint;
+  return;
+  // // oled.setCursor(oled.fontWidth() * 12, oled.fontRows() * 1); // set manually to save about a hundred bytes flash
+  // oled.setCursor(70, 2);
+  // // oled.clearToEOL();
+  // oled.print(readSpeed);
+  // // oled.print(kiloBytesSecLabel);
 
-  // oled.setCursor(oled.fontWidth() * 12, oled.fontRows() * 1); // set manually to save about a hundred bytes flash
-  oled.setCursor(40, 2);
-  oled.clearToEOL();
-  oled.print(readSpeed/1000);
-  oled.print(kiloBytesSecLabel);
-
-  // oled.setCursor(oled.fontWidth() * 12, oled.fontRows() * 2); // set manually to save about a hundred bytes flash
-  oled.setCursor(40, 4);
-  oled.clearToEOL();
-  oled.print(writeSpeed/1000);
-  oled.print(kiloBytesSecLabel);
+  // // oled.setCursor(oled.fontWidth() * 12, oled.fontRows() * 2); // set manually to save about a hundred bytes flash
+  // oled.setCursor(70, 4);
+  // // oled.clearToEOL();
+  // oled.print(writeSpeed);
+  // // oled.print(kiloBytesSecLabel);
 }
 #endif
 
@@ -483,7 +488,7 @@ oled.begin(&Adafruit128x64, DISPLAY_CS_PIN, DISPLAY_DC_PIN);
   // oled.setFont(Iain5x7); // 56700
   // oled.setFont(utf8font10x16); // 58412
   oled.setFont(lcd5x7); // 56748
-  oled.set2X();
+  // oled.set2X();
   oled.clear();
   oled.println(F("BlueSCSI"));
   oled.println(VERSION);
@@ -637,9 +642,7 @@ void onFalseInit(void)
 
   while(true) {
     for(int i = 0; i < 3; i++) {
-      gpio_write(LED, high);
-      delay(250);
-      gpio_write(LED, low);
+      gpio_write(LED, !gpio_read(LED));
       delay(250);
     }
     delay(3000);
@@ -659,9 +662,7 @@ void noSDCardFound(void)
 
   while(true) {
     for(int i = 0; i < 5; i++) {
-      gpio_write(LED, high);
-      delay(250);
-      gpio_write(LED, low);
+      gpio_write(LED, !gpio_read(LED));
       delay(250);
     }
     delay(3000);
@@ -1257,20 +1258,23 @@ void MsgOut2()
       currentWriteSpeedCountsIndex = 0;
   }
 
+  unsigned long currentMillis;
   void updateSpeedDisplay() {
-    if(nextOledUpdate < millis()) {
-      nextOledUpdate = millis() + UPDATE_OLED_SPEED_DISPLAY_EVERY_MS;
+    currentMillis = millis();
+    if(nextOledUpdate < currentMillis) {
+      nextOledUpdate = currentMillis + UPDATE_OLED_SPEED_DISPLAY_EVERY_MS;
 
-      uint32_t avgReadSpeed = 0;
-      uint32_t avgWriteSpeed = 0;
-      for(uint8_t i = 0; i < OLED_SPEED_DISPLAY_BINS; i++) {
-        avgReadSpeed += readSpeedCounts[i];
-        avgWriteSpeed += writeSpeedCounts[i];
-      }
+      // uint32_t avgReadSpeed = 0;
+      // uint32_t avgWriteSpeed = 0;
+      // for(uint8_t i = 0; i < OLED_SPEED_DISPLAY_BINS; i++) {
+      //   avgReadSpeed += readSpeedCounts[i];
+      //   avgWriteSpeed += writeSpeedCounts[i];
+      // }
 
-      updateOledDisplay((avgReadSpeed / OLED_SPEED_DISPLAY_BINS), (avgWriteSpeed / OLED_SPEED_DISPLAY_BINS));
+      // updateOledDisplay((avgReadSpeed / OLED_SPEED_DISPLAY_BINS), (avgWriteSpeed / OLED_SPEED_DISPLAY_BINS));
+      updateOledDisplay(0, 0);
 
-      updateSpeedAvgs();
+      // updateSpeedAvgs();
     }
   }
 #endif
@@ -1285,9 +1289,9 @@ void loop()
 
   // Wait until RST = H, BSY = H, SEL = L
   do {
-  // #if USE_OLED_DISPLAY
-  //   updateSpeedDisplay();
-  // #endif
+  #if USE_OLED_DISPLAY
+    updateSpeedDisplay();
+  #endif
   } while( SCSI_IN(vBSY) || !SCSI_IN(vSEL) || SCSI_IN(vRST));
 
   // #if USE_OLED_DISPLAY
