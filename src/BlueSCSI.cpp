@@ -370,9 +370,9 @@ bool hddimageOpen(HDDIMG *h,const char *image_name,int id,int lun,int blocksize)
 unsigned long nextOledUpdate = UPDATE_OLED_SPEED_DISPLAY_EVERY_MS;
 
 #define OLED_SPEED_DISPLAY_BINS 2 // one per UPDATE_OLED_SPEED_DISPLAY_EVERY_MS
-uint32_t readSpeedCounts[OLED_SPEED_DISPLAY_BINS];
+uint16_t readSpeedCounts[OLED_SPEED_DISPLAY_BINS];
 uint8_t currentReadSpeedCountsIndex = 0;
-uint32_t writeSpeedCounts[OLED_SPEED_DISPLAY_BINS];
+uint16_t writeSpeedCounts[OLED_SPEED_DISPLAY_BINS];
 uint8_t currentWriteSpeedCountsIndex = 0;
 
 const char kiloBytesSecLabel[] = " K/s";
@@ -1000,9 +1000,9 @@ byte onReadCommand(uint32_t adds, uint32_t len)
   writeDataPhaseSD(adds, len);
   gpio_write(LED, low);
 
-  // #if USE_OLED_DISPLAY
-  // readSpeedCounts[currentReadSpeedCountsIndex] += adds;
-  // #endif
+  #if USE_OLED_DISPLAY
+  readSpeedCounts[currentReadSpeedCountsIndex] += len;
+  #endif
   return 0x00; //sts
 }
 
@@ -1021,9 +1021,9 @@ byte onWriteCommand(uint32_t adds, uint32_t len)
   readDataPhaseSD(adds, len);
   gpio_write(LED, low);
 
-  // #if USE_OLED_DISPLAY
-  // writeSpeedCounts[currentWriteSpeedCountsIndex] += adds;
-  // #endif
+  #if USE_OLED_DISPLAY
+  writeSpeedCounts[currentWriteSpeedCountsIndex] += len;
+  #endif
   return 0; //sts
 }
 
