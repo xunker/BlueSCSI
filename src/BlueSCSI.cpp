@@ -1,38 +1,38 @@
-/*  
+/*
  *  BlueSCSI
  *  Copyright (c) 2021  Eric Helgeson, Androda
- *  
- *  This file is free software: you may copy, redistribute and/or modify it  
- *  under the terms of the GNU General Public License as published by the  
- *  Free Software Foundation, either version 2 of the License, or (at your  
- *  option) any later version.  
- *  
- *  This file is distributed in the hope that it will be useful, but  
- *  WITHOUT ANY WARRANTY; without even the implied warranty of  
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU  
- *  General Public License for more details.  
- *  
- *  You should have received a copy of the GNU General Public License  
- *  along with this program.  If not, see https://github.com/erichelgeson/bluescsi.  
- *  
- * This file incorporates work covered by the following copyright and  
- * permission notice:  
- *  
- *     Copyright (c) 2019 komatsu   
- *  
- *     Permission to use, copy, modify, and/or distribute this software  
- *     for any purpose with or without fee is hereby granted, provided  
- *     that the above copyright notice and this permission notice appear  
- *     in all copies.  
- *  
- *     THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL  
- *     WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED  
- *     WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE  
- *     AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR  
- *     CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS  
- *     OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,  
- *     NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN  
- *     CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.  
+ *
+ *  This file is free software: you may copy, redistribute and/or modify it
+ *  under the terms of the GNU General Public License as published by the
+ *  Free Software Foundation, either version 2 of the License, or (at your
+ *  option) any later version.
+ *
+ *  This file is distributed in the hope that it will be useful, but
+ *  WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *  General Public License for more details.
+ *
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see https://github.com/erichelgeson/bluescsi.
+ *
+ * This file incorporates work covered by the following copyright and
+ * permission notice:
+ *
+ *     Copyright (c) 2019 komatsu
+ *
+ *     Permission to use, copy, modify, and/or distribute this software
+ *     for any purpose with or without fee is hereby granted, provided
+ *     that the above copyright notice and this permission notice appear
+ *     in all copies.
+ *
+ *     THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL
+ *     WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED
+ *     WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE
+ *     AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR
+ *     CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
+ *     OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT,
+ *     NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN
+ *     CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
 #include <Arduino.h> // For Platform.IO
@@ -51,6 +51,9 @@
 #define READ_SPEED_OPTIMIZE  1 // Faster reads
 #define WRITE_SPEED_OPTIMIZE 1 // Speeding up writes
 #define USE_DB2ID_TABLE      1 // Use table to get ID from SEL-DB
+
+#define USE_OLED_DISPLAY 1 // 0: No Display
+                           // 1: Initialize and use SPI SSD1306 OLED display
 
 // SCSI config
 #define NUM_SCSIID  7          // Maximum number of supported SCSI-IDs (The minimum is 0)
@@ -74,6 +77,17 @@ SdFs SD;
 #define LOGHEX(XX)  //Serial.print(XX, HEX)
 #define LOGN(XX)    //Serial.println(XX)
 #define LOGHEXN(XX) //Serial.println(XX, HEX)
+#endif
+
+#if USE_OLED_DISPLAY
+#include <SPI.h>
+#include "SSD1306Ascii.h"
+#include "SSD1306AsciiSpi.h"
+#define DISPLAY_CS_PIN  PB0
+#define DISPLAY_RST_PIN PA0 // not needed by all displays
+#define DISPLAY_DC_PIN  PA1
+
+SSD1306AsciiSpi oled;
 #endif
 
 #define active   1
@@ -350,6 +364,64 @@ bool hddimageOpen(HDDIMG *h,const char *image_name,int id,int lun,int blocksize)
   return false;
 }
 
+#if USE_OLED_DISPLAY
+
+#define UPDATE_OLED_SPEED_DISPLAY_EVERY_MS 1000
+unsigned long nextOledUpdate = UPDATE_OLED_SPEED_DISPLAY_EVERY_MS;
+
+#define OLED_SPEED_DISPLAY_BINS 2 // one per UPDATE_OLED_SPEED_DISPLAY_EVERY_MS
+uint32_t readSpeedCounts[OLED_SPEED_DISPLAY_BINS];
+uint8_t currentReadSpeedCountsIndex = 0;
+uint32_t writeSpeedCounts[OLED_SPEED_DISPLAY_BINS];
+uint8_t currentWriteSpeedCountsIndex = 0;
+
+const char kiloBytesSecLabel[] = " K/s";
+
+void buildOledDisplay() {
+  /*
+    01234567891
+
+  A 0123456
+  B R K/s: nnnn
+  C w K/s: nnnn
+  D
+  */
+
+  for(uint8_t i = 0; i <= 6; i++) {
+    if (bitRead(scsi_id_mask, i)) {
+      oled.print(i);
+    } else {
+      oled.print(F(" "));
+    }
+  }
+  oled.println();
+  oled.println(F("R"));
+  // oled.print(F("R"));
+  // oled.println(kiloBytesSecLabel);
+  oled.println(F("W"));
+  // oled.println(F("W"));
+  // oled.println(kiloBytesSecLabel);
+}
+
+
+
+void updateOledDisplay(uint32_t readSpeed, uint32_t writeSpeed) {
+  // void clearField(uint8_t col, uint8_t row, uint8_t n);
+
+  // oled.setCursor(oled.fontWidth() * 12, oled.fontRows() * 1); // set manually to save about a hundred bytes flash
+  oled.setCursor(40, 2);
+  oled.clearToEOL();
+  oled.print(readSpeed/1000);
+  oled.print(kiloBytesSecLabel);
+
+  // oled.setCursor(oled.fontWidth() * 12, oled.fontRows() * 2); // set manually to save about a hundred bytes flash
+  oled.setCursor(40, 4);
+  oled.clearToEOL();
+  oled.print(writeSpeed/1000);
+  oled.print(kiloBytesSecLabel);
+}
+#endif
+
 /*
  * Initialization.
  *  Initialize the bus and set the PIN orientation
@@ -398,6 +470,24 @@ void setup()
   //attachInterrupt(PIN_MAP[RST].gpio_bit, onBusReset, FALLING);
 
   LED_ON();
+
+#if USE_OLED_DISPLAY
+#ifdef DISPLAY_RST_PIN
+oled.begin(&Adafruit128x64, DISPLAY_CS_PIN, DISPLAY_DC_PIN, DISPLAY_RST_PIN);
+#else
+oled.begin(&Adafruit128x64, DISPLAY_CS_PIN, DISPLAY_DC_PIN);
+#endif
+  // oled.setFont(ZevvPeep8x16); // 57612
+  // oled.setFont(System5x7); // 56752
+  // oled.setFont(Verdana12); // 57440
+  // oled.setFont(Iain5x7); // 56700
+  // oled.setFont(utf8font10x16); // 58412
+  oled.setFont(lcd5x7); // 56748
+  oled.set2X();
+  oled.clear();
+  oled.println(F("BlueSCSI"));
+  oled.println(VERSION);
+#endif
 
   // clock = 36MHz , about 4Mbytes/sec
   if(!SD.begin(SD1_CONFIG)) {
@@ -466,6 +556,12 @@ void setup()
 
   finalizeFileLog();
   LED_OFF();
+
+  #if USE_OLED_DISPLAY
+    oled.clear();
+    buildOledDisplay();
+  #endif
+
   //Occurs when the RST pin state changes from HIGH to LOW
   attachInterrupt(PIN_MAP[RST].gpio_bit, onBusReset, FALLING);
 }
@@ -517,7 +613,7 @@ void finalizeFileLog() {
         LOG_FILE.print((h->m_blocksize<1000) ? ": " : ":");
         LOG_FILE.print(h->m_blocksize);
       }
-      else      
+      else
         LOG_FILE.print(":----");
     }
     LOG_FILE.println(":");
@@ -533,6 +629,12 @@ void finalizeFileLog() {
 void onFalseInit(void)
 {
   LOG_FILE.sync();
+
+  #if USE_OLED_DISPLAY
+    oled.clear();
+    oled.print(F("No images\nfound"));
+  #endif
+
   while(true) {
     for(int i = 0; i < 3; i++) {
       gpio_write(LED, high);
@@ -549,6 +651,12 @@ void onFalseInit(void)
  */
 void noSDCardFound(void)
 {
+
+#if USE_OLED_DISPLAY
+  oled.clear();
+  oled.print(F("No Card found"));
+#endif
+
   while(true) {
     for(int i = 0; i < 5; i++) {
       gpio_write(LED, high);
@@ -573,7 +681,7 @@ void onBusReset(void)
   if(isHigh(gpio_read(RST))) {
     delayMicroseconds(20);
     if(isHigh(gpio_read(RST))) {
-#endif  
+#endif
   // BUS FREE is done in the main process
 //      gpio_mode(MSG, GPIO_OUTPUT_OD);
 //      gpio_mode(CD,  GPIO_OUTPUT_OD);
@@ -599,7 +707,7 @@ inline byte readHandshake(void)
   byte r = readIO();
   SCSI_OUT(vREQ,inactive)
   while( SCSI_IN(vACK)) { if(m_isBusReset) return 0; }
-  return r;  
+  return r;
 }
 
 /*
@@ -641,7 +749,7 @@ void writeDataPhase(int len, const byte* p)
   }
 }
 
-/* 
+/*
  * Data in phase.
  *  Send len block while reading from SD card.
  */
@@ -667,7 +775,7 @@ void writeDataPhaseSD(uint32_t adds, uint32_t len)
 #define FETCH_BSRR_DB() (bsrr_val = bsrr_tbl[src_byte])
 #define REQ_OFF_DB_SET(BSRR_VAL) *db_dst = BSRR_VAL
 #define WAIT_ACK_ACTIVE()   while(!m_isBusReset && !SCSI_IN(vACK))
-#define WAIT_ACK_INACTIVE() do{ if(m_isBusReset) return; }while(SCSI_IN(vACK)) 
+#define WAIT_ACK_INACTIVE() do{ if(m_isBusReset) return; }while(SCSI_IN(vACK))
 
     SCSI_DB_OUTPUT()
     register byte *srcptr= m_buf;                 // Source buffer
@@ -857,7 +965,7 @@ void onRequestSenseCommand(byte len)
   };
   buf[2] = m_senseKey;
   m_senseKey = 0;
-  writeDataPhase(len < 18 ? len : 18, buf);  
+  writeDataPhase(len < 18 ? len : 18, buf);
 }
 
 /*
@@ -866,12 +974,12 @@ void onRequestSenseCommand(byte len)
 byte onReadCapacityCommand(byte pmi)
 {
   if(!m_img) return 0x02; // Image file absent
-  
+
   uint32_t bl = m_img->m_blocksize;
   uint32_t bc = m_img->m_fileSize / bl;
   uint8_t buf[8] = {
     bc >> 24, bc >> 16, bc >> 8, bc,
-    bl >> 24, bl >> 16, bl >> 8, bl    
+    bl >> 24, bl >> 16, bl >> 8, bl
   };
   writeDataPhase(8, buf);
   return 0x00;
@@ -887,10 +995,14 @@ byte onReadCommand(uint32_t adds, uint32_t len)
   LOGHEXN(len);
 
   if(!m_img) return 0x02; // Image file absent
-  
+
   gpio_write(LED, high);
   writeDataPhaseSD(adds, len);
   gpio_write(LED, low);
+
+  // #if USE_OLED_DISPLAY
+  // readSpeedCounts[currentReadSpeedCountsIndex] += adds;
+  // #endif
   return 0x00; //sts
 }
 
@@ -902,12 +1014,16 @@ byte onWriteCommand(uint32_t adds, uint32_t len)
   LOGN("-W");
   LOGHEXN(adds);
   LOGHEXN(len);
-  
+
   if(!m_img) return 0x02; // Image file absent
-  
+
   gpio_write(LED, high);
   readDataPhaseSD(adds, len);
   gpio_write(LED, low);
+
+  // #if USE_OLED_DISPLAY
+  // writeSpeedCounts[currentWriteSpeedCountsIndex] += adds;
+  // #endif
   return 0; //sts
 }
 
@@ -937,7 +1053,7 @@ byte onModeSenseCommand(byte dbd, int cmd2, uint32_t len)
   }
   // Number of blocks
   uint32_t diskblocks = (uint32_t)(size >> disksize);
-  memset(m_buf, 0, sizeof(m_buf)); 
+  memset(m_buf, 0, sizeof(m_buf));
   int a = 4;
   if(dbd == 0) {
     uint32_t bl = m_img->m_blocksize;
@@ -1012,7 +1128,7 @@ byte onModeSenseCommand(byte dbd, int cmd2, uint32_t len)
       0,//Density code
       bc >> 16, bc >> 8, bc,
       0, //Reserve
-      bl >> 16, bl >> 8, bl    
+      bl >> 16, bl >> 8, bl
     };
     memcpy(&m_buf[4], c, 8);
     a += 8;
@@ -1050,7 +1166,7 @@ byte onModeSenseCommand(byte dbd, int cmd2, uint32_t len)
   return 0x00;
 }
 #endif
-    
+
 #if SCSI_SELECT == 1
 /*
  * dtc510b_setDriveparameter
@@ -1086,7 +1202,7 @@ static byte dtc510b_setDriveparameter(void)
 
   // receive paramter
   writeDataPhase(sizeof(DriveParameter),(byte *)(&DriveParameter));
- 
+
   maxCylinder =
     (((uint16_t)DriveParameter.HighCylinderAddressByte)<<8) |
     (DriveParameter.LowCylinderAddressByte);
@@ -1131,16 +1247,55 @@ void MsgOut2()
   m_msc %= 256;
 }
 
+#if USE_OLED_DISPLAY
+  void updateSpeedAvgs(unsigned long presetMillis = 0) {
+    currentReadSpeedCountsIndex++;
+    if (currentReadSpeedCountsIndex >= OLED_SPEED_DISPLAY_BINS)
+      currentReadSpeedCountsIndex = 0;
+    currentWriteSpeedCountsIndex++;
+    if (currentWriteSpeedCountsIndex >= OLED_SPEED_DISPLAY_BINS)
+      currentWriteSpeedCountsIndex = 0;
+  }
+
+  void updateSpeedDisplay() {
+    if(nextOledUpdate < millis()) {
+      nextOledUpdate = millis() + UPDATE_OLED_SPEED_DISPLAY_EVERY_MS;
+
+      uint32_t avgReadSpeed = 0;
+      uint32_t avgWriteSpeed = 0;
+      for(uint8_t i = 0; i < OLED_SPEED_DISPLAY_BINS; i++) {
+        avgReadSpeed += readSpeedCounts[i];
+        avgWriteSpeed += writeSpeedCounts[i];
+      }
+
+      updateOledDisplay((avgReadSpeed / OLED_SPEED_DISPLAY_BINS), (avgWriteSpeed / OLED_SPEED_DISPLAY_BINS));
+
+      updateSpeedAvgs();
+    }
+  }
+#endif
+
 /*
  * Main loop.
  */
-void loop() 
+void loop()
 {
   //int msg = 0;
   m_msg = 0;
 
   // Wait until RST = H, BSY = H, SEL = L
-  do {} while( SCSI_IN(vBSY) || !SCSI_IN(vSEL) || SCSI_IN(vRST));
+  do {
+  // #if USE_OLED_DISPLAY
+  //   updateSpeedDisplay();
+  // #endif
+  } while( SCSI_IN(vBSY) || !SCSI_IN(vSEL) || SCSI_IN(vRST));
+
+  // #if USE_OLED_DISPLAY
+  // if(nextOledUpdate < millis()) {
+  //   nextOledUpdate = millis() + UPDATE_OLED_SPEED_DISPLAY_EVERY_MS;
+  //   updateSpeedAvgs();
+  // }
+  // #endif
 
   // BSY+ SEL-
   // If the ID to respond is not driven, wait for the next
@@ -1172,7 +1327,7 @@ void loop()
     }
   }
   SCSI_TARGET_ACTIVE()  // (BSY), REQ, MSG, CD, IO output turned on
-  //  
+  //
   if(isHigh(gpio_read(ATN))) {
     bool syncenable = false;
     int syncperiod = 50;
@@ -1229,7 +1384,7 @@ void loop()
   SCSI_OUT(vMSG,inactive) // gpio_write(MSG, low);
   SCSI_OUT(vCD ,  active) // gpio_write(CD, high);
   SCSI_OUT(vIO ,inactive) // gpio_write(IO, low);
-  
+
   int len;
   byte cmd[12];
   cmd[0] = readHandshake(); if(m_isBusReset) goto BusFree;
@@ -1262,7 +1417,7 @@ void loop()
   }
   // if(!m_img) m_sts |= 0x02;            // Missing image file for LUN
   //LOGHEX(((uint32_t)m_img));
-  
+
   LOG(":ID ");
   LOG(m_id);
   LOG(":LUN ");
@@ -1338,7 +1493,7 @@ void loop()
     LOGN("[DTC510B setDriveParameter]");
     m_sts |= dtc510b_setDriveparameter();
     break;
-#endif    
+#endif
   default:
     LOGN("[*Unknown]");
     m_sts |= 0x02;
