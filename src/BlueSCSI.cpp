@@ -82,12 +82,15 @@ SdFs SD;
 #if USE_OLED_DISPLAY
 #include <SPI.h>
 #include "SSD1306Ascii.h"
-#include "SSD1306AsciiSpi.h"
+#include "SSD1306AsciiSoftSpi.h"
+
+#define DISPLAY_MOSI_PIN PA3 // RX2
+#define DISPLAY_CLK_PIN  PA2 // TX2
 #define DISPLAY_CS_PIN  PB0
 #define DISPLAY_RST_PIN PA0 // not needed by all displays
 #define DISPLAY_DC_PIN  PA1
 
-SSD1306AsciiSpi oled;
+SSD1306AsciiSoftSpi oled;
 #endif
 
 #define active   1
@@ -478,9 +481,9 @@ void setup()
 
 #if USE_OLED_DISPLAY
 #ifdef DISPLAY_RST_PIN
-oled.begin(&Adafruit128x64, DISPLAY_CS_PIN, DISPLAY_DC_PIN, DISPLAY_RST_PIN);
+oled.begin(&Adafruit128x64, DISPLAY_CS_PIN, DISPLAY_DC_PIN, DISPLAY_CLK_PIN, DISPLAY_MOSI_PIN, DISPLAY_RST_PIN);
 #else
-oled.begin(&Adafruit128x64, DISPLAY_CS_PIN, DISPLAY_DC_PIN);
+oled.begin(&Adafruit128x64, DISPLAY_CS_PIN, DISPLAY_DC_PIN, DISPLAY_CLK_PIN, DISPLAY_MOSI_PIN);
 #endif
   // oled.setFont(ZevvPeep8x16); // 57612
   // oled.setFont(System5x7); // 56752
