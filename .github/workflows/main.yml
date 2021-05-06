@@ -42,4 +42,4 @@ jobs:
     # - name: Run PlatformIO
     #   run: pio ci path/to/test/file.c --board=<ID_1> --board=<ID_2> --board=<ID_N>
     - name: Run PlatformIO
-      run: pio run -e <ID_1> -e <ID_2> -e <ID_N>
+      run: pio run #--environment <ID_1> --environment <ID_2> --environment <ID_N>
