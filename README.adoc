@@ -1,4 +1,10 @@
 # BlueSCSI
+
+IMPORTANT: THIS IS A **NOT** THE OFFICIAL BLUESCSI REPO!
+PLEASE GO TO https://github.com/erichelgeson/BlueSCSI/[github.com/erichelgeson/BlueSCSI] INSTEAD.
+
+---
+
 :toc: macro
 
 BlueSCSI & ArdSCSino are hardware that reproduces SCSI devices (hard disks) with an Arduino STM32F103C (aka Blue Pill.)
